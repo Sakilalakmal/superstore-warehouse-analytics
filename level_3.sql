@@ -39,7 +39,7 @@ SELECT
 	prev_year_sales,
 	total_sales - prev_year_sales AS year_performance,
 	CASE WHEN prev_year_sales = 0 OR prev_year_sales IS NULL THEN NULL 
-	     ELSE CONCAT((total_sales - prev_year_sales) * 100 / prev_year_sales,'%')
+	     ELSE (total_sales - prev_year_sales) * 100 / prev_year_sales
 	END AS growth_percentage,
 	CASE WHEN total_sales - prev_year_sales > 0 THEN 'good performance'
 		 WHEN prev_year_sales IS NULL THEN NULL
@@ -54,5 +54,29 @@ FROM gold.fact_order_sales
 GROUP BY region ,year	
 
 ) t
-WHERE CONCAT((total_sales - prev_year_sales) * 100 / prev_year_sales,'%') >= '90%'
+WHERE (total_sales - prev_year_sales) * 100 / prev_year_sales >= 90
 ORDER BY region ,year
+
+-- Which product sub-categories are frequently sold in large quantities but generate low profit?
+
+SELECT
+	prod.sub_category,
+	SUM(fact.quantity) AS total_quantity,
+	SUM(fact.profit) AS total_profits,
+	SUM(fact.profit) / NULLIF(SUM(fact.quantity),0) AS profit_per_unit
+FROM gold.fact_order_sales AS fact
+	LEFT JOIN gold.dim_products AS prod
+	ON fact.product_id = prod.product_id
+	GROUP BY prod.sub_category
+	HAVING SUM(fact.profit) / NULLIF(SUM(fact.quantity),0) < 20
+
+-- Which shipping modes are most efficient in terms of profit after shipping cost
+
+SELECT
+	ship_mode,
+	SUM(profit) AS total_profit,
+	SUM(shipping_cost) AS total_shipping_cost,
+	SUM(profit) - SUM(shipping_cost)  AS balance
+FROM gold.fact_order_sales
+	GROUP BY ship_mode
+	HAVING SUM(profit) - SUM(shipping_cost) > 0
