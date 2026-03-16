@@ -125,4 +125,62 @@ SELECT
 FROM gold.fact_order_sales
 	GROUP BY region
 
-select * from gold.fact_order_sales
+select * from gold.fact_order_sales;
+
+-- shipping delays by state
+WITH avg_days_shipping AS (
+	SELECT
+		 ship_mode,
+		 AVG(shipping_days) AS avg_days
+	FROM gold.fact_order_sales
+		GROUP BY ship_mode
+	),
+	avg_days_calc AS 
+	(SELECT
+		fact.order_id,
+		fact.state,
+		fact.ship_mode,
+		fact.shipping_days,
+		avg_days.avg_days,
+		CASE WHEN fact.shipping_days > avg_days.avg_days  THEN 1 ELSE 0  END AS late_ship_flag
+	FROM gold.fact_order_sales AS fact
+		LEFT JOIN avg_days_shipping AS avg_days
+		ON fact.ship_mode = avg_days.ship_mode
+	)
+	SELECT
+		state,
+		COUNT(order_id) AS total_orders,
+		SUM(late_ship_flag) AS late_shipment_count,
+		CONCAT(SUM(late_ship_flag) * 100 / NULLIF(COUNT(order_id),0),'%') AS late_percentage
+	FROM avg_days_calc 
+		GROUP BY state
+		ORDER BY SUM(late_ship_flag) DESC;
+
+-- shipping performance trend over time
+
+WITH month_avg AS(
+	SELECT
+		DATETRUNC(MONTH,order_date) AS months,
+		AVG(shipping_days) AS avg_day
+	FROM gold.fact_order_sales
+	GROUP BY DATETRUNC(MONTH,order_date)
+	),
+	differ AS (
+	SELECT
+		fact.order_id,
+		fact.shipping_days,
+		DATETRUNC(MONTH,fact.order_date)fact_month,
+		avg_month.avg_day,
+		CASE WHEN fact.shipping_days > avg_month.avg_day THEN 1 ELSE 0 END AS late_flag
+	FROM gold.fact_order_sales AS fact
+		LEFT JOIN month_avg AS avg_month
+		ON DATETRUNC(MONTH,fact.order_date) = avg_month.months
+	)
+	SELECT
+		fact_month,
+		COUNT(order_id) AS order_count,
+		SUM(late_flag) AS delay_orders,
+		CONCAT(ROUND(SUM(late_flag) * 100 / NULLIF(COUNT(order_id),0),2),'%') AS late_rate
+	FROM differ
+	GROUP BY fact_month
+	ORDER BY fact_month ASC
