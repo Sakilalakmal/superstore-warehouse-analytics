@@ -25,7 +25,8 @@ SELECT
 	year,
 	DATEDIFF(day,order_date,ship_date) AS shipping_days,
 	CASE WHEN profit > 0 THEN 1 ELSE 0 END is_profitable,
-	CASE WHEN order_priority IN ('Critical','High') THEN 1 ELSE 0 END is_high_priority
+	CASE WHEN order_priority IN ('Critical','High') THEN 1 ELSE 0 END is_high_priority,
+	sales - shipping_cost AS net_revenue
 FROM silver.order_sales;
 
 
