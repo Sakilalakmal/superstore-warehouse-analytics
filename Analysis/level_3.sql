@@ -80,3 +80,66 @@ SELECT
 FROM gold.fact_order_sales
 	GROUP BY ship_mode
 	HAVING SUM(profit) - SUM(shipping_cost) > 0
+
+-- Which customers show declining purchase behavior over time (YEAR)
+
+WITH prev_yr_sales_amount AS (
+SELECT
+	customer_name,
+	year,
+	SUM(sales) AS cust_total_sales,
+	LAG(SUM(sales)) OVER(PARTITION BY customer_name ORDER BY year ASC) AS prev_yr_sales
+FROM gold.fact_order_sales
+	GROUP BY year , customer_name
+
+)
+SELECT 
+	customer_name,
+	COUNT(*) churn_count
+FROM prev_yr_sales_amount
+	WHERE cust_total_sales < prev_yr_sales
+	GROUP BY customer_name
+	ORDER BY COUNT(*) DESC
+
+-- What is the repeat purchase rate of customers
+
+WITH customer_orders AS (
+    SELECT
+        customer_name,
+        COUNT(DISTINCT order_id) AS order_count
+    FROM gold.fact_order_sales
+    GROUP BY customer_name
+),
+repeat_customers AS (
+    SELECT COUNT(*) AS repeat_count
+    FROM customer_orders
+    WHERE order_count > 1
+),
+total_customers AS (
+    SELECT COUNT(*) AS total_count
+    FROM customer_orders
+)
+SELECT 
+    repeat_count * 100.0 / total_count AS repeat_purchase_rate
+FROM repeat_customers, total_customers;
+
+-- differ between total sales and net_revenue
+SELECT
+	SUM(sales) AS total_sales,
+	SUM(net_revenue) AS total_net_revenue,
+	SUM(sales) - SUM(net_revenue) AS balance_revenue
+FROM gold.fact_order_sales
+
+-- which product has lowest sales in per market
+SELECT * FROM (
+	SELECT
+		fact.market,
+		prod.product_name,
+		SUM(sales) AS total_sales,
+		ROW_NUMBER() OVER(PARTITION BY fact.market ORDER BY SUM(sales) ASC) prod_rank
+	FROM gold.fact_order_sales AS fact
+	LEFT JOIN gold.dim_products AS prod
+	ON fact.product_id = prod.product_id
+	GROUP BY fact.market , prod.product_name
+)t
+WHERE prod_rank = 1
